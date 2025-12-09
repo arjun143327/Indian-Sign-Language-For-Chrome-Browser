@@ -407,7 +407,6 @@ const VideoCall = () => {
               <p className="caption-text">
                 {caption ? (
                   <>
-                    <span style={{ color: '#667eea', fontWeight: 'bold' }}>You: </span>
                     {caption}
                   </>
                 ) : (
@@ -466,7 +465,6 @@ const VideoCall = () => {
         }}>
           {caption && (
             <>
-              <span style={{ color: '#A5B4FC', fontWeight: 'bold', marginRight: '8px' }}>You:</span>
               {caption}
             </>
           )}
