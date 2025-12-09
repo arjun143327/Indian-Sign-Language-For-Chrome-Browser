@@ -146,6 +146,79 @@ const VideoCall = () => {
     return () => peer.destroy();
   }, []);
 
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript = transcript;
+        } else {
+          interimTranscript = transcript;
+        }
+      }
+      const text = finalTranscript || interimTranscript;
+      if (text) {
+        setCaption(text);
+        // Broadcast to all tracked connections
+        connectionsRef.current.forEach(conn => {
+          if (conn.open) {
+            try {
+              conn.send({ type: 'caption', text });
+            } catch (e) {
+              console.error("Broadcast failed", e);
+            }
+          }
+        });
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech error:', event.error);
+    };
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      // Don't auto-restart immediately to prevent loops if error occurred
+    };
+
+    recognitionRef.current = recognition;
+    // Try to start, but browser might block it without user interaction
+    try {
+      recognition.start();
+    } catch (e) {
+      console.log("Auto-start failed", e);
+    }
+
+    return () => {
+      recognition.stop();
+    };
+  }, []);
+
+  const startListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
+
   const callPeer = (remoteId) => {
     if (!remoteId) {
       setError("Please enter a valid ID");
