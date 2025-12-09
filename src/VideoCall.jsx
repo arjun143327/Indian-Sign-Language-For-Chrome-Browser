@@ -92,6 +92,8 @@ const VideoCall = () => {
   const recognitionRef = useRef(null);
   const connectionsRef = useRef([]);
   const lastSendTime = useRef(0);
+  const transcriptHistory = useRef([]);
+  const isRecognitionActive = useRef(false);
 
   const handleConnection = (conn) => {
     conn.on('data', (data) => {
@@ -162,30 +164,66 @@ const VideoCall = () => {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
+    recognition.maxAlternatives = 1;
+
+    const startRecognition = () => {
+      if (isRecognitionActive.current) return;
+      try {
+        recognition.start();
+        isRecognitionActive.current = true;
+      } catch (e) {
+        console.error('Start error:', e);
+      }
+    };
+
+    recognition.onstart = () => {
+      isRecognitionActive.current = true;
+      setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      isRecognitionActive.current = false;
+      setIsListening(false);
+      // Auto-restart
+      setTimeout(startRecognition, 500);
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech error:', event.error);
+      isRecognitionActive.current = false;
+      if (event.error === 'no-speech' || event.error === 'audio-capture' || event.error === 'not-allowed') {
+        return;
+      }
+      setTimeout(startRecognition, 1000);
+    };
 
     recognition.onresult = (event) => {
       let interimTranscript = '';
-      let finalTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript = transcript;
+          transcriptHistory.current.push(transcript);
+          if (transcriptHistory.current.length > 3) {
+            transcriptHistory.current.shift();
+          }
         } else {
           interimTranscript = transcript;
         }
       }
-      const text = finalTranscript || interimTranscript;
+
+      const fullText = transcriptHistory.current.join(' ') + (interimTranscript ? ' ' + interimTranscript : '');
       const now = Date.now();
 
-      if (text) {
-        setCaption(text);
-        // Broadcast to all tracked connections (Throttled)
-        if (finalTranscript || (now - lastSendTime.current > 100)) {
+      if (fullText.trim()) {
+        setCaption(fullText);
+
+        // Broadcast
+        if (!interimTranscript || (now - lastSendTime.current > 100)) {
           connectionsRef.current.forEach(conn => {
             if (conn.open) {
               try {
-                conn.send({ type: 'caption', text });
+                conn.send({ type: 'caption', text: fullText });
               } catch (e) {
                 console.error("Broadcast failed", e);
               }
@@ -196,26 +234,8 @@ const VideoCall = () => {
       }
     };
 
-    recognition.onerror = (event) => {
-      console.error('Speech error:', event.error);
-    };
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      // Don't auto-restart immediately to prevent loops if error occurred
-    };
-
     recognitionRef.current = recognition;
-    // Try to start, but browser might block it without user interaction
-    try {
-      recognition.start();
-    } catch (e) {
-      console.log("Auto-start failed", e);
-    }
+    startRecognition();
 
     return () => {
       recognition.stop();
@@ -223,7 +243,7 @@ const VideoCall = () => {
   }, []);
 
   const startListening = () => {
-    if (recognitionRef.current) {
+    if (recognitionRef.current && !isRecognitionActive.current) {
       try {
         recognitionRef.current.start();
       } catch (e) {
@@ -418,28 +438,34 @@ const VideoCall = () => {
 
             <div className="captions-box">
               <p className="caption-text">
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
-                    {isListening ? "Listening..." : "Microphone is off"}
-                  </span>
-                  {!isListening && (
-                    <button
-                      onClick={startListening}
-                      style={{
-                        background: '#667eea',
-                        border: 'none',
-                        borderRadius: '20px',
-                        padding: '6px 16px',
-                        color: 'white',
-                        fontSize: '12px',
-                        cursor: 'pointer',
-                        fontWeight: '600'
-                      }}
-                    >
-                      Tap to Speak
-                    </button>
-                  )}
-                </div>
+                {caption ? (
+                  <>
+                    {caption}
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                      {isListening ? "Listening..." : "Microphone is off"}
+                    </span>
+                    {!isListening && (
+                      <button
+                        onClick={startListening}
+                        style={{
+                          background: '#667eea',
+                          border: 'none',
+                          borderRadius: '20px',
+                          padding: '6px 16px',
+                          color: 'white',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          fontWeight: '600'
+                        }}
+                      >
+                        Tap to Speak
+                      </button>
+                    )}
+                  </div>
+                )}
               </p>
             </div>
           </>
@@ -452,6 +478,30 @@ const VideoCall = () => {
 
       {/* Live Caption Overlay */}
 
+
+      {/* Live Caption Overlay */}
+      {caption && (
+        <div id="liveCaption" style={{
+          position: 'fixed',
+          bottom: '110px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          maxWidth: '800px',
+          background: 'rgba(0, 0, 0, 0.9)',
+          backdropFilter: 'blur(10px)',
+          padding: '16px 24px',
+          borderRadius: '16px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+          zIndex: 500,
+          color: 'white',
+          fontSize: '18px',
+          lineHeight: '1.5',
+          fontWeight: '500',
+          textAlign: 'center',
+        }}>
+          {caption}
+        </div>
+      )}
 
       {/* Bottom Toolbar */}
       <div className="toolbar">
