@@ -253,97 +253,41 @@ const VideoCall = () => {
       {/* AI Translator Overlay - Interactive Two-State System */}
 
       {/* STATE 1: SMALL BUTTON (Default) */}
-      {!isAvatarExpanded && (
-        <div
-          id="avatarSmall"
-          onClick={() => setIsAvatarExpanded(true)}
-          style={{
-            position: 'fixed',
-            bottom: '130px',
-            right: '32px',
-            width: '80px',
-            height: '80px',
-            background: 'rgba(17,24,39,0.95)',
-            border: '2px solid #667eea',
-            borderRadius: '50%',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 24px rgba(102,126,234,0.4)',
-            zIndex: 999,
-            overflow: 'hidden'
-          }}
-        >
-          <div style={{ width: '100%', height: '100%', transform: 'scale(1.5) translateY(10px)' }}>
-            <Avatar />
-          </div>
-        </div>
-      )}
+      {/* AI Translator Overlay */}
+      <div
+        className={`avatar-overlay ${!isAvatarExpanded ? 'minimized' : ''}`}
+        onClick={() => !isAvatarExpanded && setIsAvatarExpanded(true)}
+      >
+        {isAvatarExpanded ? (
+          <>
+            <div className="avatar-header">
+              <div className="avatar-label">
+                <span style={{ color: '#10B981', marginRight: '8px' }}>●</span> AI TRANSLATOR
+              </div>
+              <button
+                className="btn-minimize"
+                onClick={(e) => { e.stopPropagation(); setIsAvatarExpanded(false); }}
+              >
+                <Icons.X />
+              </button>
+            </div>
 
-      {/* STATE 2: EXPANDED PANEL (On Click) */}
-      {isAvatarExpanded && (
-        <div
-          id="avatarExpanded"
-          style={{
-            position: 'fixed',
-            bottom: '130px',
-            right: '32px',
-            width: '360px',
-            background: 'rgba(17,24,39,0.95)',
-            backdropFilter: 'blur(24px)',
-            borderRadius: '24px',
-            padding: '24px',
-            border: '1px solid rgba(255,255,255,0.15)',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.8)',
-            zIndex: 999,
-            animation: 'fadeIn 0.3s ease'
-          }}
-        >
-          {/* Close Button */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setIsAvatarExpanded(false); }}
-            style={{
-              position: 'absolute',
-              top: '16px',
-              right: '16px',
-              width: '32px',
-              height: '32px',
-              background: 'rgba(255,255,255,0.1)',
-              border: 'none',
-              borderRadius: '8px',
-              color: '#E5E7EB',
-              fontSize: '20px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: '0.2s'
-            }}
-          >
-            ×
-          </button>
-
-          {/* Label */}
-          <div style={{ textAlign: 'center', color: '#A5B4FC', fontSize: '12px', textTransform: 'uppercase', marginBottom: '16px', fontWeight: '600', letterSpacing: '1px' }}>
-            ● AI TRANSLATOR
-          </div>
-
-          {/* Avatar */}
-          <div style={{ width: '120px', height: '120px', margin: '0 auto 20px', borderRadius: '50%', border: '3px solid #667eea', overflow: 'hidden', position: 'relative' }}>
-            <div style={{ width: '100%', height: '100%', transform: 'scale(1.4) translateY(10px)' }}>
+            <div className="avatar-circle">
               <Avatar />
             </div>
-          </div>
 
-          {/* Captions */}
-          <div style={{ background: 'rgba(0,0,0,0.7)', padding: '20px', borderRadius: '16px', minHeight: '100px' }}>
-            <p style={{ color: 'white', fontSize: '16px', lineHeight: '1.6', margin: '0' }}>
-              Listening for speech and sign language...
-            </p>
+            <div className="captions-box">
+              <p className="caption-text">
+                Listening for speech and sign language...
+              </p>
+            </div>
+          </>
+        ) : (
+          <div style={{ width: '100%', height: '100%' }}>
+            <Avatar />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Bottom Toolbar */}
       <div className="toolbar">

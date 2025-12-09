@@ -45,61 +45,12 @@ body {
   overflow: hidden;
 }
 
-.main-content {
-  display: flex;
-  height: calc(100vh - 80px);
-  /* Adjust based on header height */
-  width: 100vw;
-  overflow: hidden;
-}
-
-.video-section {
-  flex: 1;
-  position: relative;
-  overflow: hidden;
-}
-
-.avatar-section {
-  flex: 1;
-  background: rgba(0, 0, 0, 0.2);
-  border-left: 1px solid var(--glass-border);
-  position: relative;
-}
-
-@media (max-width: 768px) {
-  .main-content {
-    flex-direction: column;
-  }
-
-  .avatar-section {
-    height: 300px;
-    flex: none;
-    border-left: none;
-    border-top: 1px solid var(--glass-border);
-  }
-}
-
-.avatar-loading {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  font-size: 1.2rem;
-  font-weight: 500;
-  animation: pulse 1.5s infinite;
-}
-
-
-
 /* ═══════════════════════════════════════════════════════ */
 /* LANDING PAGE */
 /* ═══════════════════════════════════════════════════════ */
 
 .lobby-container {
-  height: 100vh;
-  width: 100vw;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -426,14 +377,14 @@ body {
   position: fixed;
   bottom: 110px;
   right: 32px;
-  width: 300px;
-  background: rgba(17, 24, 39, 0.95);
+  width: 360px;
+  background: rgba(17, 24, 39, 0.92);
   backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 24px;
   padding: 20px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
-  z-index: 999;
+  z-index: 99;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -491,115 +442,18 @@ body {
 }
 
 .avatar-circle {
-  width: 160px;
-  height: 160px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   border: 3px solid #667eea;
-  background: radial-gradient(circle, rgba(102, 126, 234, 0.3), rgba(17, 24, 39, 0.8));
+  background: radial-gradient(circle, rgba(102, 126, 234, 0.2), transparent);
   margin: 0 auto 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 5rem;
+  font-size: 3rem;
   animation: pulseAvatar 2s infinite, rotateGlow 8s linear infinite;
   position: relative;
-  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
-}
-
-.avatar-circle svg {
-  width: 80px;
-  height: 80px;
-  stroke: #A5B4FC;
-  stroke-width: 1.5;
-}
-
-.avatar-circle::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, transparent, #667eea, transparent);
-  animation: rotateGlow 3s linear infinite;
-  opacity: 0.5;
-  z-index: -1;
-}
-
-.captions-box {
-  background: rgba(0, 0, 0, 0.6);
-  border-radius: 12px;
-  padding: 20px;
-  min-height: 80px;
-  max-height: 120px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
-}
-
-.captions-box::-webkit-scrollbar {
-  width: 4px;
-}
-
-.captions-box::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.captions-box::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
-}
-
-.caption-text {
-  font-size: 16px;
-  line-height: 1.8;
-  color: white;
-  letter-spacing: 0.3px;
-  animation: fadeIn 0.3s ease;
-}
-
-/* ═══════════════════════════════════════════════════════ */
-/* ANIMATIONS */
-/* ═══════════════════════════════════════════════════════ */
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-
-  50% {
-    background-position: 100% 50%;
-  }
-
-  border-radius: 50%;
-  border: 3px solid #667eea;
-  background: radial-gradient(circle, rgba(102, 126, 234, 0.3), rgba(17, 24, 39, 0.8));
-  margin: 0 auto 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 5rem;
-  animation: pulseAvatar 2s infinite,
-  rotateGlow 8s linear infinite;
-  position: relative;
-  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.4);
-}
-
-.avatar-circle svg {
-  width: 80px;
-  height: 80px;
-  stroke: #A5B4FC;
-  stroke-width: 1.5;
 }
 
 .avatar-circle::before {
@@ -756,107 +610,4 @@ body {
     right: 16px;
     bottom: 100px;
   }
-}
-
-/* ═══════════════════════════════════════════════════════ */
-/* FINAL EMERGENCY FIXES - CONSOLIDATED */
-/* ═══════════════════════════════════════════════════════ */
-
-/* 1. LANDING PAGE - FULL SCREEN FIX */
-#landingPage,
-.lobby-container {
-  width: 100vw !important;
-  height: 100vh !important;
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) !important;
-  z-index: 9999 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* Ensure content inside landing page is visible */
-.lobby-card {
-  display: block !important;
-  max-width: 90% !important;
-  z-index: 10000 !important;
-}
-
-/* Hide all other elements when on landing page */
-.lobby-container~* {
-  display: none !important;
-}
-
-/* 2. VIDEO GRID & CAMERA VISIBILITY */
-.video-grid {
-  display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
-  gap: 16px !important;
-  width: 100vw !important;
-  height: calc(100vh - 120px) !important;
-  background: #000 !important;
-}
-
-.video-tile {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  position: relative !important;
-  overflow: hidden !important;
-  background: #1a1a1a !important;
-}
-
-video {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-}
-
-/* 3. AVATAR VISIBILITY */
-#avatarSmall {
-  display: flex !important;
-  position: fixed !important;
-  bottom: 130px !important;
-  right: 32px !important;
-  width: 80px !important;
-  height: 80px !important;
-  z-index: 9999 !important;
-  background: rgba(17, 24, 39, 0.95) !important;
-  border-radius: 50% !important;
-}
-
-#avatarExpanded {
-  display: block !important;
-  position: fixed !important;
-  bottom: 130px !important;
-  right: 32px !important;
-  width: 360px !important;
-  z-index: 9999 !important;
-  background: rgba(17, 24, 39, 0.95) !important;
-}
-
-/* Ensure 3D canvas is visible */
-canvas {
-  display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-/* Hide unwanted global elements */
-header,
-nav,
-.sidebar,
-.page-title,
-.panel {
-  display: none !important;
-}
-
-/* Reset box model for landing page only */
-.lobby-container * {
-  box-sizing: border-box;
 }

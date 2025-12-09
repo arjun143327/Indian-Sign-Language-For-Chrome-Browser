@@ -1,38 +1,30 @@
-import React, { useRef, useEffect } from 'react';
-import { useGLTF, useAnimations } from '@react-three/drei';
-import { Canvas } from '@react-three/fiber';
+import React from 'react';
 
-function Model({ url }) {
-  const group = useRef();
-  const { scene, animations } = useGLTF(url);
-  const { actions } = useAnimations(animations, group);
-
-  // Static avatar - no animations
-  // useEffect(() => {
-  //   if (actions && Object.keys(actions).length > 0) {
-  //     const firstAction = Object.keys(actions)[0];
-  //     actions[firstAction].play();
-  //   }
-  // }, [actions]);
-
-  return (
-    <primitive
-      object={scene}
-      ref={group}
-      scale={2.2}
-      position={[0, -1.5, 0]}
-    />
-  );
-}
+const BotIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="#A5B4FC" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ width: '60%', height: '60%' }}>
+    <path d="M12 8V4H8"></path>
+    <rect width="16" height="12" x="4" y="8" rx="2"></rect>
+    <path d="M2 14h2"></path>
+    <path d="M20 14h2"></path>
+    <path d="M15 13v2"></path>
+    <path d="M9 13v2"></path>
+  </svg>
+);
 
 const Avatar = () => {
   return (
-    <div style={{ width: '160px', height: '160px', borderRadius: '50%', overflow: 'hidden' }}>
-      <Canvas camera={{ position: [0, 0.5, 3], fov: 50 }}>
-        <ambientLight intensity={0.7} />
-        <directionalLight position={[5, 5, 5]} intensity={1.2} />
-        <Model url="/readyplayerme.glb" />
-      </Canvas>
+    <div style={{
+      width: '100%',
+      height: '100%',
+      borderRadius: '50%',
+      overflow: 'hidden',
+      background: 'radial-gradient(circle, rgba(102, 126, 234, 0.2), rgba(17, 24, 39, 0.8))',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      border: '2px solid rgba(102, 126, 234, 0.3)'
+    }}>
+      <BotIcon />
     </div>
   );
 };
