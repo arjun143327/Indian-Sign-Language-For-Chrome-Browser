@@ -83,6 +83,7 @@ const VideoCall = () => {
   const [caption, setCaption] = useState('');
   const [remoteCaption, setRemoteCaption] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [remoteIsListening, setRemoteIsListening] = useState(false);
   const [remoteStream, setRemoteStream] = useState(null);
 
   const localVideoRef = useRef(null);
@@ -100,6 +101,8 @@ const VideoCall = () => {
     conn.on('data', (data) => {
       if (data && data.type === 'caption') {
         setRemoteCaption(data.text);
+      } else if (data && data.type === 'listening') {
+        setRemoteIsListening(data.isListening);
       }
     });
     conn.on('open', () => {
@@ -133,7 +136,15 @@ const VideoCall = () => {
 
     peer.on('call', (call) => {
       setCallStatus('Connected');
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000
+        }
+      })
         .then((stream) => {
           localStreamRef.current = stream;
           if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -255,6 +266,8 @@ const VideoCall = () => {
   }, []);
 
   const toggleListening = () => {
+    const newListeningState = !shouldListenRef.current;
+
     if (shouldListenRef.current) {
       shouldListenRef.current = false;
       if (recognitionRef.current) recognitionRef.current.stop();
@@ -269,6 +282,16 @@ const VideoCall = () => {
         }
       }
     }
+
+    // Broadcast listening state to all connections
+    connectionsRef.current = connectionsRef.current.filter(conn => conn.open);
+    connectionsRef.current.forEach(conn => {
+      try {
+        conn.send({ type: 'listening', isListening: newListeningState });
+      } catch (e) {
+        console.error("Failed to send listening state", e);
+      }
+    });
   };
 
   const callPeer = (remoteId) => {
@@ -279,7 +302,15 @@ const VideoCall = () => {
     setCallStatus('Calling...');
     setError('');
 
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 48000
+      }
+    })
       .then((stream) => {
         localStreamRef.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -382,6 +413,14 @@ const VideoCall = () => {
           <video ref={remoteVideoRef} autoPlay playsInline />
           <div className="name-tag">
             <span>Remote User</span>
+            {remoteIsListening && (
+              <span style={{
+                color: '#10B981',
+                fontSize: '12px',
+                marginLeft: '8px',
+                animation: 'pulse 1.5s infinite'
+              }}>🎤 Speaking</span>
+            )}
           </div>
           {remoteCaption && (
             <div style={{
@@ -389,17 +428,18 @@ const VideoCall = () => {
               top: '20px',
               left: '50%',
               transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.8)',
-              padding: '8px 16px',
+              background: 'rgba(16, 185, 129, 0.95)',
+              padding: '12px 20px',
               borderRadius: '16px',
               color: 'white',
-              fontSize: '14px',
+              fontSize: '16px',
               maxWidth: '90%',
               textAlign: 'center',
               zIndex: 20,
-              border: '1px solid rgba(255,255,255,0.2)'
+              border: '2px solid rgba(16, 185, 129, 1)',
+              boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)'
             }}>
-              <span style={{ color: '#A5B4FC', fontWeight: 'bold', marginRight: '4px' }}>Remote:</span>
+              <span style={{ fontWeight: 'bold', marginRight: '8px' }}>Remote:</span>
               {remoteCaption}
             </div>
           )}
@@ -496,10 +536,7 @@ const VideoCall = () => {
         )}
       </div>
 
-      {/* Live Caption Overlay */}
-
-
-      {/* Live Caption Overlay */}
+      {/* Live Caption Overlay - YOUR TEXT */}
       {caption && (
         <div id="liveCaption" style={{
           position: 'fixed',
@@ -507,18 +544,20 @@ const VideoCall = () => {
           left: '50%',
           transform: 'translateX(-50%)',
           maxWidth: '800px',
-          background: 'rgba(0, 0, 0, 0.9)',
+          background: 'rgba(59, 130, 246, 0.95)',
           backdropFilter: 'blur(10px)',
           padding: '16px 24px',
           borderRadius: '16px',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+          boxShadow: '0 8px 24px rgba(59, 130, 246, 0.5)',
           zIndex: 500,
           color: 'white',
           fontSize: '18px',
           lineHeight: '1.5',
-          fontWeight: '500',
+          fontWeight: '600',
           textAlign: 'center',
+          border: '2px solid rgba(59, 130, 246, 1)'
         }}>
+          <span style={{ marginRight: '8px' }}>You:</span>
           {caption}
         </div>
       )}
