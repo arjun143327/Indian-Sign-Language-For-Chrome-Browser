@@ -81,6 +81,7 @@ const VideoCall = () => {
   const [isCamOn, setIsCamOn] = useState(true);
   const [isAvatarExpanded, setIsAvatarExpanded] = useState(false);
   const [caption, setCaption] = useState('');
+  const [remoteCaption, setRemoteCaption] = useState('');
   const [isListening, setIsListening] = useState(false);
 
   const localVideoRef = useRef(null);
@@ -88,6 +89,23 @@ const VideoCall = () => {
   const peerInstance = useRef(null);
   const localStreamRef = useRef(null);
   const recognitionRef = useRef(null);
+  const connectionsRef = useRef([]);
+
+  const handleConnection = (conn) => {
+    conn.on('data', (data) => {
+      if (data && data.type === 'caption') {
+        setRemoteCaption(data.text);
+      }
+    });
+    conn.on('open', () => {
+      if (!connectionsRef.current.includes(conn)) {
+        connectionsRef.current.push(conn);
+      }
+    });
+    if (conn.open && !connectionsRef.current.includes(conn)) {
+      connectionsRef.current.push(conn);
+    }
+  };
 
   useEffect(() => {
     const generateShortId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -96,6 +114,10 @@ const VideoCall = () => {
 
     peer.on('open', (id) => {
       setPeerId(id);
+    });
+
+    peer.on('connection', (conn) => {
+      handleConnection(conn);
     });
 
     peer.on('error', (err) => {
@@ -124,67 +146,6 @@ const VideoCall = () => {
     return () => peer.destroy();
   }, []);
 
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = (event) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          finalTranscript = transcript;
-        } else {
-          interimTranscript = transcript;
-        }
-      }
-      const text = finalTranscript || interimTranscript;
-      if (text) setCaption(text);
-    };
-
-    recognition.onerror = (event) => {
-      console.error('Speech error:', event.error);
-    };
-
-    recognition.onstart = () => {
-      setIsListening(true);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      // Don't auto-restart immediately to prevent loops if error occurred
-    };
-
-    recognitionRef.current = recognition;
-    // Try to start, but browser might block it without user interaction
-    try {
-      recognition.start();
-    } catch (e) {
-      console.log("Auto-start failed", e);
-    }
-
-    return () => {
-      recognition.stop();
-    };
-  }, []);
-
-  const startListening = () => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  };
-
   const callPeer = (remoteId) => {
     if (!remoteId) {
       setError("Please enter a valid ID");
@@ -198,6 +159,9 @@ const VideoCall = () => {
         localStreamRef.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
         const call = peerInstance.current.call(remoteId, stream);
+
+        const conn = peerInstance.current.connect(remoteId);
+        handleConnection(conn);
 
         call.on('stream', (remoteStream) => {
           setCallStatus('Connected');
@@ -294,6 +258,26 @@ const VideoCall = () => {
           <div className="name-tag">
             <span>Remote User</span>
           </div>
+          {remoteCaption && (
+            <div style={{
+              position: 'absolute',
+              top: '20px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(0,0,0,0.8)',
+              padding: '8px 16px',
+              borderRadius: '16px',
+              color: 'white',
+              fontSize: '14px',
+              maxWidth: '90%',
+              textAlign: 'center',
+              zIndex: 20,
+              border: '1px solid rgba(255,255,255,0.2)'
+            }}>
+              <span style={{ color: '#A5B4FC', fontWeight: 'bold', marginRight: '4px' }}>Remote:</span>
+              {remoteCaption}
+            </div>
+          )}
         </div>
 
         {/* Local Video */}
