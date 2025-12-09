@@ -4,8 +4,9 @@ import Peer from 'peerjs';
 const VideoCall = () => {
   const [peerId, setPeerId] = useState('');
   const [remotePeerIdValue, setRemotePeerIdValue] = useState('');
-  const [remoteStream, setRemoteStream] = useState(null);
+
   const [callStatus, setCallStatus] = useState('Idle'); // Idle, Calling, Connected
+  const [error, setError] = useState('');
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -25,6 +26,11 @@ const VideoCall = () => {
       console.log('My peer ID is: ' + id);
     });
 
+    peer.on('error', (err) => {
+      console.error(err);
+      setError('PeerJS Error: ' + err.type);
+    });
+
     peer.on('call', (call) => {
       navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then((stream) => {
@@ -39,7 +45,7 @@ const VideoCall = () => {
 
           // Receive remote stream
           call.on('stream', (remoteStream) => {
-            setRemoteStream(remoteStream);
+
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = remoteStream;
             }
@@ -47,6 +53,7 @@ const VideoCall = () => {
         })
         .catch(err => {
           console.error('Failed to get local stream', err);
+          setError('Camera Error: ' + err.message);
         });
     });
 
@@ -59,6 +66,8 @@ const VideoCall = () => {
 
   const callPeer = (remoteId) => {
     setCallStatus('Calling...');
+    setError('');
+
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then((stream) => {
         // Show local video
@@ -69,15 +78,21 @@ const VideoCall = () => {
         const call = peerInstance.current.call(remoteId, stream);
 
         call.on('stream', (remoteStream) => {
-          setRemoteStream(remoteStream);
+
           setCallStatus('Connected');
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
           }
         });
+
+        call.on('error', (err) => {
+          console.error(err);
+          setError('Call Error: ' + err.type);
+        });
       })
       .catch(err => {
         console.error('Failed to get local stream', err);
+        setError('Camera Error: ' + err.message + '. (Try using HTTPS or localhost)');
         setCallStatus('Error');
       });
   };
@@ -96,6 +111,7 @@ const VideoCall = () => {
           <button onClick={() => callPeer(remotePeerIdValue)}>Call</button>
         </div>
         <p>Status: {callStatus}</p>
+        {error && <p style={{ color: 'red', fontWeight: 'bold' }}>{error}</p>}
       </div>
 
       <div className="video-grid">
