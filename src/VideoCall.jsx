@@ -80,11 +80,14 @@ const VideoCall = () => {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(true);
   const [isAvatarExpanded, setIsAvatarExpanded] = useState(false);
+  const [caption, setCaption] = useState('');
+  const [isListening, setIsListening] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerInstance = useRef(null);
   const localStreamRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
     const generateShortId = () => Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -120,6 +123,67 @@ const VideoCall = () => {
     peerInstance.current = peer;
     return () => peer.destroy();
   }, []);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript = transcript;
+        } else {
+          interimTranscript = transcript;
+        }
+      }
+      const text = finalTranscript || interimTranscript;
+      if (text) setCaption(text);
+    };
+
+    recognition.onerror = (event) => {
+      console.error('Speech error:', event.error);
+    };
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      // Don't auto-restart immediately to prevent loops if error occurred
+    };
+
+    recognitionRef.current = recognition;
+    // Try to start, but browser might block it without user interaction
+    try {
+      recognition.start();
+    } catch (e) {
+      console.log("Auto-start failed", e);
+    }
+
+    return () => {
+      recognition.stop();
+    };
+  }, []);
+
+  const startListening = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  };
 
   const callPeer = (remoteId) => {
     if (!remoteId) {
@@ -262,7 +326,13 @@ const VideoCall = () => {
           <>
             <div className="avatar-header">
               <div className="avatar-label">
-                <span style={{ color: '#10B981', marginRight: '8px' }}>●</span> AI TRANSLATOR
+                <span style={{
+                  color: isListening ? '#EF4444' : '#10B981',
+                  marginRight: '8px',
+                  animation: isListening ? 'pulse 1.5s infinite' : 'none',
+                  display: 'inline-block'
+                }}>●</span>
+                {isListening ? 'LISTENING...' : 'AI TRANSLATOR'}
               </div>
               <button
                 className="btn-minimize"
@@ -278,7 +348,35 @@ const VideoCall = () => {
 
             <div className="captions-box">
               <p className="caption-text">
-                Listening for speech and sign language...
+                {caption ? (
+                  <>
+                    <span style={{ color: '#667eea', fontWeight: 'bold' }}>You: </span>
+                    {caption}
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                      {isListening ? "Listening..." : "Microphone is off"}
+                    </span>
+                    {!isListening && (
+                      <button
+                        onClick={startListening}
+                        style={{
+                          background: '#667eea',
+                          border: 'none',
+                          borderRadius: '20px',
+                          padding: '6px 16px',
+                          color: 'white',
+                          fontSize: '12px',
+                          cursor: 'pointer',
+                          fontWeight: '600'
+                        }}
+                      >
+                        Tap to Speak
+                      </button>
+                    )}
+                  </div>
+                )}
               </p>
             </div>
           </>
@@ -288,6 +386,35 @@ const VideoCall = () => {
           </div>
         )}
       </div>
+
+      {/* Live Caption Overlay */}
+      {caption && (
+        <div id="liveCaption" style={{
+          position: 'fixed',
+          bottom: '110px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          maxWidth: '800px',
+          background: 'rgba(0, 0, 0, 0.9)',
+          backdropFilter: 'blur(10px)',
+          padding: '16px 24px',
+          borderRadius: '16px',
+          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+          zIndex: 500,
+          color: 'white',
+          fontSize: '18px',
+          lineHeight: '1.5',
+          fontWeight: '500',
+          textAlign: 'center',
+        }}>
+          {caption && (
+            <>
+              <span style={{ color: '#A5B4FC', fontWeight: 'bold', marginRight: '8px' }}>You:</span>
+              {caption}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Bottom Toolbar */}
       <div className="toolbar">
