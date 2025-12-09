@@ -83,6 +83,7 @@ const VideoCall = () => {
   const [caption, setCaption] = useState('');
   const [remoteCaption, setRemoteCaption] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [remoteStream, setRemoteStream] = useState(null);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -90,6 +91,7 @@ const VideoCall = () => {
   const localStreamRef = useRef(null);
   const recognitionRef = useRef(null);
   const connectionsRef = useRef([]);
+  const lastSendTime = useRef(0);
 
   const handleConnection = (conn) => {
     conn.on('data', (data) => {
@@ -134,7 +136,7 @@ const VideoCall = () => {
           if (localVideoRef.current) localVideoRef.current.srcObject = stream;
           call.answer(stream);
           call.on('stream', (remoteStream) => {
-            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+            setRemoteStream(remoteStream);
           });
         })
         .catch(err => {
@@ -145,6 +147,12 @@ const VideoCall = () => {
     peerInstance.current = peer;
     return () => peer.destroy();
   }, []);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -168,18 +176,23 @@ const VideoCall = () => {
         }
       }
       const text = finalTranscript || interimTranscript;
+      const now = Date.now();
+
       if (text) {
         setCaption(text);
-        // Broadcast to all tracked connections
-        connectionsRef.current.forEach(conn => {
-          if (conn.open) {
-            try {
-              conn.send({ type: 'caption', text });
-            } catch (e) {
-              console.error("Broadcast failed", e);
+        // Broadcast to all tracked connections (Throttled)
+        if (finalTranscript || (now - lastSendTime.current > 100)) {
+          connectionsRef.current.forEach(conn => {
+            if (conn.open) {
+              try {
+                conn.send({ type: 'caption', text });
+              } catch (e) {
+                console.error("Broadcast failed", e);
+              }
             }
-          }
-        });
+          });
+          lastSendTime.current = now;
+        }
       }
     };
 
@@ -238,7 +251,7 @@ const VideoCall = () => {
 
         call.on('stream', (remoteStream) => {
           setCallStatus('Connected');
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+          setRemoteStream(remoteStream);
         });
 
         call.on('error', (err) => {
@@ -405,34 +418,28 @@ const VideoCall = () => {
 
             <div className="captions-box">
               <p className="caption-text">
-                {caption ? (
-                  <>
-                    {caption}
-                  </>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
-                      {isListening ? "Listening..." : "Microphone is off"}
-                    </span>
-                    {!isListening && (
-                      <button
-                        onClick={startListening}
-                        style={{
-                          background: '#667eea',
-                          border: 'none',
-                          borderRadius: '20px',
-                          padding: '6px 16px',
-                          color: 'white',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          fontWeight: '600'
-                        }}
-                      >
-                        Tap to Speak
-                      </button>
-                    )}
-                  </div>
-                )}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                    {isListening ? "Listening..." : "Microphone is off"}
+                  </span>
+                  {!isListening && (
+                    <button
+                      onClick={startListening}
+                      style={{
+                        background: '#667eea',
+                        border: 'none',
+                        borderRadius: '20px',
+                        padding: '6px 16px',
+                        color: 'white',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
+                    >
+                      Tap to Speak
+                    </button>
+                  )}
+                </div>
               </p>
             </div>
           </>
@@ -444,32 +451,7 @@ const VideoCall = () => {
       </div>
 
       {/* Live Caption Overlay */}
-      {caption && (
-        <div id="liveCaption" style={{
-          position: 'fixed',
-          bottom: '110px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          maxWidth: '800px',
-          background: 'rgba(0, 0, 0, 0.9)',
-          backdropFilter: 'blur(10px)',
-          padding: '16px 24px',
-          borderRadius: '16px',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
-          zIndex: 500,
-          color: 'white',
-          fontSize: '18px',
-          lineHeight: '1.5',
-          fontWeight: '500',
-          textAlign: 'center',
-        }}>
-          {caption && (
-            <>
-              {caption}
-            </>
-          )}
-        </div>
-      )}
+
 
       {/* Bottom Toolbar */}
       <div className="toolbar">
