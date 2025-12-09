@@ -94,6 +94,7 @@ const VideoCall = () => {
   const lastSendTime = useRef(0);
   const transcriptHistory = useRef([]);
   const isRecognitionActive = useRef(false);
+  const shouldListenRef = useRef(false);
 
   const handleConnection = (conn) => {
     conn.on('data', (data) => {
@@ -163,7 +164,7 @@ const VideoCall = () => {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = 'en-IN';
     recognition.maxAlternatives = 1;
 
     const startRecognition = () => {
@@ -184,28 +185,38 @@ const VideoCall = () => {
     recognition.onend = () => {
       isRecognitionActive.current = false;
       setIsListening(false);
-      // Auto-restart
-      setTimeout(startRecognition, 500);
+      // Only restart if user wants it active
+      if (shouldListenRef.current) {
+        setTimeout(startRecognition, 500);
+      }
     };
 
     recognition.onerror = (event) => {
       console.error('Speech error:', event.error);
       isRecognitionActive.current = false;
       if (event.error === 'no-speech' || event.error === 'audio-capture' || event.error === 'not-allowed') {
+        if (shouldListenRef.current) setTimeout(startRecognition, 1000);
         return;
       }
-      setTimeout(startRecognition, 1000);
+      if (shouldListenRef.current) setTimeout(startRecognition, 1000);
     };
 
     recognition.onresult = (event) => {
       let interimTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          transcriptHistory.current.push(transcript);
-          if (transcriptHistory.current.length > 3) {
-            transcriptHistory.current.shift();
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+        const confidence = result[0].confidence;
+
+        if (result.isFinal) {
+          if (confidence > 0.65 || confidence === 0) {
+            transcriptHistory.current.push(transcript.trim());
+            if (transcriptHistory.current.length > 3) {
+              transcriptHistory.current.shift();
+            }
+          } else {
+            console.log(`Rejected low confidence: ${transcript} (${confidence})`);
           }
         } else {
           interimTranscript = transcript;
@@ -220,13 +231,14 @@ const VideoCall = () => {
 
         // Broadcast
         if (!interimTranscript || (now - lastSendTime.current > 100)) {
+          // Cleanup closed connections
+          connectionsRef.current = connectionsRef.current.filter(conn => conn.open);
+
           connectionsRef.current.forEach(conn => {
-            if (conn.open) {
-              try {
-                conn.send({ type: 'caption', text: fullText });
-              } catch (e) {
-                console.error("Broadcast failed", e);
-              }
+            try {
+              conn.send({ type: 'caption', text: fullText });
+            } catch (e) {
+              console.error("Broadcast failed", e);
             }
           });
           lastSendTime.current = now;
@@ -235,19 +247,26 @@ const VideoCall = () => {
     };
 
     recognitionRef.current = recognition;
-    startRecognition();
+    // Don't auto-start. Wait for user interaction.
 
     return () => {
       recognition.stop();
     };
   }, []);
 
-  const startListening = () => {
-    if (recognitionRef.current && !isRecognitionActive.current) {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error(e);
+  const toggleListening = () => {
+    if (shouldListenRef.current) {
+      shouldListenRef.current = false;
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      shouldListenRef.current = true;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {
+          console.error(e);
+        }
       }
     }
   };
@@ -437,36 +456,37 @@ const VideoCall = () => {
             </div>
 
             <div className="captions-box">
-              <p className="caption-text">
-                {caption ? (
-                  <>
-                    {caption}
-                  </>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
-                      {isListening ? "Listening..." : "Microphone is off"}
+              <div className="caption-text">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={toggleListening}
+                    style={{
+                      background: isListening ? '#EF4444' : '#10B981',
+                      border: 'none',
+                      borderRadius: '20px',
+                      padding: '8px 20px',
+                      color: 'white',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {isListening ? "Stop Speaking" : "Tap to Speak"}
+                  </button>
+
+                  {isListening ? (
+                    <span style={{ color: '#A5B4FC', fontWeight: '500' }}>
+                      {caption || "Listening..."}
                     </span>
-                    {!isListening && (
-                      <button
-                        onClick={startListening}
-                        style={{
-                          background: '#667eea',
-                          border: 'none',
-                          borderRadius: '20px',
-                          padding: '6px 16px',
-                          color: 'white',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          fontWeight: '600'
-                        }}
-                      >
-                        Tap to Speak
-                      </button>
-                    )}
-                  </div>
-                )}
-              </p>
+                  ) : (
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                      Press button to start
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </>
         ) : (
