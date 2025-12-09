@@ -45,6 +45,54 @@ body {
   overflow: hidden;
 }
 
+.main-content {
+  display: flex;
+  height: calc(100vh - 80px);
+  /* Adjust based on header height */
+  width: 100vw;
+  overflow: hidden;
+}
+
+.video-section {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.avatar-section {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 1px solid var(--glass-border);
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column;
+  }
+
+  .avatar-section {
+    height: 300px;
+    flex: none;
+    border-left: none;
+    border-top: 1px solid var(--glass-border);
+  }
+}
+
+.avatar-loading {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  font-weight: 500;
+  animation: pulse 1.5s infinite;
+}
+
+
+
 /* ═══════════════════════════════════════════════════════ */
 /* LANDING PAGE */
 /* ═══════════════════════════════════════════════════════ */
