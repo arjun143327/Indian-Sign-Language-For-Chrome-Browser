@@ -442,8 +442,8 @@ body {
 }
 
 .avatar-circle {
-  width: 120px;
-  height: 120px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   border: 3px solid #667eea;
   background: radial-gradient(circle, rgba(102, 126, 234, 0.2), transparent);
@@ -452,7 +452,7 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 3rem;
-  animation: pulseAvatar 2s infinite, rotateGlow 8s linear infinite;
+  animation: pulseAvatar 2s infinite;
   position: relative;
 }
 
@@ -462,7 +462,6 @@ body {
   inset: -6px;
   border-radius: 50%;
   background: conic-gradient(from 0deg, transparent, #667eea, transparent);
-  animation: rotateGlow 3s linear infinite;
   opacity: 0.5;
   z-index: -1;
 }

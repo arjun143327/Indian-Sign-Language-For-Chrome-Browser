@@ -432,8 +432,8 @@ const VideoCall = () => {
               </button>
             </div>
 
-            <div className="avatar-circle">
-              <Avatar />
+            <div className="avatar-circle" style={{ width: '150px', height: '150px' }}>
+              <Avatar size="150px" showBorder={true} />
             </div>
 
             <div className="captions-box">
