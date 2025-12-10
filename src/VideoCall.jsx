@@ -69,6 +69,14 @@ const Icons = {
       <path d="M15 13v2"></path>
       <path d="M9 13v2"></path>
     </svg>
+  ),
+  Hand: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"></path>
+      <path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"></path>
+      <path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"></path>
+      <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"></path>
+    </svg>
   )
 };
 
@@ -98,12 +106,19 @@ const VideoCall = () => {
   const clearCaptionTimeout = useRef(null);
   const shouldListenRef = useRef(false);
 
+  // ISL Detection State
+  const [isDetecting, setIsDetecting] = useState(false);
+  const [detectedISLText, setDetectedISLText] = useState('');
+  const detectionIntervalRef = useRef(null);
+
   const handleConnection = (conn) => {
     conn.on('data', (data) => {
       if (data && data.type === 'caption') {
         setRemoteCaption(data.text);
       } else if (data && data.type === 'listening') {
         setRemoteIsListening(data.isListening);
+      } else if (data && data.type === 'isl-sign') {
+        setRemoteCaption(prev => prev ? prev + " " + data.text : "ISL: " + data.text);
       }
     });
     conn.on('open', () => {
@@ -196,10 +211,12 @@ const VideoCall = () => {
 
     recognition.onend = () => {
       isRecognitionActive.current = false;
-      setIsListening(false);
-      // Only restart if user wants it active
+      // Only set to false if we are NOT intending to restart
+      // This prevents the UI from flickering "off" during the split-second restart
       if (shouldListenRef.current) {
-        setTimeout(startRecognition, 500);
+        setTimeout(startRecognition, 100); // Reduced delay for faster restart
+      } else {
+        setIsListening(false);
       }
     };
 
@@ -312,6 +329,76 @@ const VideoCall = () => {
       }
     });
   };
+
+  // ═══════════════════════════════════════════════════════
+  // ISL DETECTION LOGIC
+  // ═══════════════════════════════════════════════════════
+  const toggleISLDetection = () => {
+    if (isDetecting) {
+      // STOP DETECTION
+      setIsDetecting(false);
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+        detectionIntervalRef.current = null;
+      }
+      setDetectedISLText('');
+    } else {
+      // START DETECTION
+      setIsDetecting(true);
+      setDetectedISLText('');
+
+      detectionIntervalRef.current = setInterval(async () => {
+        if (localVideoRef.current && localVideoRef.current.srcObject) {
+          const video = localVideoRef.current;
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+          const base64Image = canvas.toDataURL('image/jpeg');
+
+          try {
+            const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/detect-sign`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image: base64Image })
+            });
+
+            const data = await response.json();
+            if (data.success && data.sign) {
+              setDetectedISLText(prev => {
+                const newText = prev + data.sign;
+
+                // Broadcast to peer
+                connectionsRef.current = connectionsRef.current.filter(conn => conn.open);
+                connectionsRef.current.forEach(conn => {
+                  try {
+                    conn.send({ type: 'isl-sign', text: newText });
+                  } catch (e) {
+                    console.error("ISL Broadcast failed", e);
+                  }
+                });
+
+                return newText;
+              });
+            }
+          } catch (error) {
+            console.error("ISL Detection API Error:", error);
+          }
+        }
+      }, 500);
+    }
+  };
+
+  // Cleanup ISL Interval on Unmount
+  useEffect(() => {
+    return () => {
+      if (detectionIntervalRef.current) {
+        clearInterval(detectionIntervalRef.current);
+      }
+    };
+  }, []);
 
   const callPeer = (remoteId) => {
     if (!remoteId) {
@@ -516,37 +603,89 @@ const VideoCall = () => {
 
             <div className="captions-box">
               <div className="caption-text">
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                {/* Listening Status - Compact Loop */}
+                <div style={{ textAlign: 'center', marginBottom: '10px', minHeight: '20px' }}>
+                  {isListening ? (
+                    <span style={{ color: '#A5B4FC', fontWeight: '500', fontSize: '13px' }}>
+                      {caption || "Listening..."}
+                    </span>
+                  ) : (
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic', fontSize: '13px' }}>
+                      Ready to start
+                    </span>
+                  )}
+                </div>
+
+                {/* Control Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%' }}>
                   <button
                     onClick={toggleListening}
                     style={{
                       background: isListening ? '#EF4444' : '#10B981',
                       border: 'none',
-                      borderRadius: '20px',
-                      padding: '8px 20px',
+                      borderRadius: '12px',
+                      padding: '10px 0',
                       color: 'white',
-                      fontSize: '14px',
+                      fontSize: '13px',
                       cursor: 'pointer',
                       fontWeight: '600',
                       boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
+                      width: '100%'
                     }}
                   >
-                    {isListening ? "Stop Speaking" : "Tap to Speak"}
+                    {isListening ? "Stop" : "Speech"}
                   </button>
 
-                  {isListening ? (
-                    <span style={{ color: '#A5B4FC', fontWeight: '500' }}>
-                      {caption || "Listening..."}
-                    </span>
-                  ) : (
-                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
-                      Press button to start
-                    </span>
-                  )}
+                  <button
+                    onClick={toggleISLDetection}
+                    style={{
+                      background: isDetecting
+                        ? 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+                        : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '10px 0',
+                      color: 'white',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      boxShadow: isDetecting ? '0 0 15px rgba(245, 87, 108, 0.5)' : '0 4px 12px rgba(0,0,0,0.2)',
+                      transition: 'all 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      animation: isDetecting ? 'pulse 2s infinite' : 'none',
+                      width: '100%'
+                    }}
+                  >
+                    <Icons.Hand />
+                    {isDetecting ? "Stop ISL" : "ISL Sign"}
+                  </button>
                 </div>
+
+                {detectedISLText && (
+                  <div style={{
+                    marginTop: '10px',
+                    background: 'rgba(255,255,255,0.1)',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '14px',
+                    letterSpacing: '1px',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    width: '100%',
+                    textAlign: 'center',
+                    wordBreak: 'break-word'
+                  }}>
+                    <span style={{ color: '#f093fb', fontWeight: 'bold', marginRight: '5px' }}>ISL:</span>
+                    {detectedISLText}
+                  </div>
+                )}
               </div>
             </div>
+
           </>
         ) : (
           <div style={{ width: '100%', height: '100%' }}>
@@ -556,30 +695,32 @@ const VideoCall = () => {
       </div>
 
       {/* Live Caption Overlay - YOUR TEXT */}
-      {caption && (
-        <div id="liveCaption" style={{
-          position: 'fixed',
-          bottom: '110px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          maxWidth: '800px',
-          background: 'rgba(59, 130, 246, 0.95)',
-          backdropFilter: 'blur(10px)',
-          padding: '16px 24px',
-          borderRadius: '16px',
-          boxShadow: '0 8px 24px rgba(59, 130, 246, 0.5)',
-          zIndex: 500,
-          color: 'white',
-          fontSize: '18px',
-          lineHeight: '1.5',
-          fontWeight: '600',
-          textAlign: 'center',
-          border: '2px solid rgba(59, 130, 246, 1)'
-        }}>
-          <span style={{ marginRight: '8px' }}>You:</span>
-          {caption}
-        </div>
-      )}
+      {
+        caption && (
+          <div id="liveCaption" style={{
+            position: 'fixed',
+            bottom: '110px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            maxWidth: '800px',
+            background: 'rgba(59, 130, 246, 0.95)',
+            backdropFilter: 'blur(10px)',
+            padding: '16px 24px',
+            borderRadius: '16px',
+            boxShadow: '0 8px 24px rgba(59, 130, 246, 0.5)',
+            zIndex: 500,
+            color: 'white',
+            fontSize: '18px',
+            lineHeight: '1.5',
+            fontWeight: '600',
+            textAlign: 'center',
+            border: '2px solid rgba(59, 130, 246, 1)'
+          }}>
+            <span style={{ marginRight: '8px' }}>You:</span>
+            {caption}
+          </div>
+        )
+      }
 
       {/* Bottom Toolbar */}
       <div className="toolbar">
@@ -608,7 +749,7 @@ const VideoCall = () => {
         </button>
       </div>
 
-    </div>
+    </div >
   );
 };
 

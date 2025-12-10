@@ -471,8 +471,8 @@ body {
   border-radius: 12px;
   padding: 20px;
   min-height: 80px;
-  max-height: 120px;
-  overflow-y: auto;
+  /* max-height: 120px; Removed to auto-fit content */
+  /* overflow-y: auto; Removed to show content */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.3) rgba(255, 255, 255, 0.1);
 }
