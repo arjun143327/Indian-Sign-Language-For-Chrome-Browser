@@ -83,6 +83,7 @@ const VideoCall = () => {
   const [caption, setCaption] = useState('');
   const [remoteCaption, setRemoteCaption] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [remoteIsListening, setRemoteIsListening] = useState(false);
   const [remoteStream, setRemoteStream] = useState(null);
 
   const localVideoRef = useRef(null);
@@ -95,11 +96,14 @@ const VideoCall = () => {
   const transcriptHistory = useRef([]);
   const isRecognitionActive = useRef(false);
   const clearCaptionTimeout = useRef(null);
+  const shouldListenRef = useRef(false);
 
   const handleConnection = (conn) => {
     conn.on('data', (data) => {
       if (data && data.type === 'caption') {
         setRemoteCaption(data.text);
+      } else if (data && data.type === 'listening') {
+        setRemoteIsListening(data.isListening);
       }
     });
     conn.on('open', () => {
@@ -133,7 +137,15 @@ const VideoCall = () => {
 
     peer.on('call', (call) => {
       setCallStatus('Connected');
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000
+        }
+      })
         .then((stream) => {
           localStreamRef.current = stream;
           if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -164,7 +176,7 @@ const VideoCall = () => {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    recognition.lang = 'en-IN';
     recognition.maxAlternatives = 1;
 
     const startRecognition = () => {
@@ -185,17 +197,20 @@ const VideoCall = () => {
     recognition.onend = () => {
       isRecognitionActive.current = false;
       setIsListening(false);
-      // Auto-restart
-      setTimeout(startRecognition, 500);
+      // Only restart if user wants it active
+      if (shouldListenRef.current) {
+        setTimeout(startRecognition, 500);
+      }
     };
 
     recognition.onerror = (event) => {
       console.error('Speech error:', event.error);
       isRecognitionActive.current = false;
       if (event.error === 'no-speech' || event.error === 'audio-capture' || event.error === 'not-allowed') {
+        if (shouldListenRef.current) setTimeout(startRecognition, 1000);
         return;
       }
-      setTimeout(startRecognition, 1000);
+      if (shouldListenRef.current) setTimeout(startRecognition, 1000);
     };
 
     recognition.onresult = (event) => {
@@ -208,12 +223,19 @@ const VideoCall = () => {
       }
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          transcriptHistory.current.push(transcript);
-          // Limit history to 1 sentence to prevent "continuing" text accumulation
-          if (transcriptHistory.current.length > 1) {
-            transcriptHistory.current.shift();
+        const result = event.results[i];
+        const transcript = result[0].transcript;
+        const confidence = result[0].confidence;
+
+        if (result.isFinal) {
+          if (confidence > 0.65 || confidence === 0) {
+            transcriptHistory.current.push(transcript.trim());
+            // Limit history to 1 sentence to prevent "continuing" text accumulation
+            if (transcriptHistory.current.length > 1) {
+              transcriptHistory.current.shift();
+            }
+          } else {
+            console.log(`Rejected low confidence: ${transcript} (${confidence})`);
           }
         } else {
           interimTranscript = transcript;
@@ -228,13 +250,14 @@ const VideoCall = () => {
 
         // Broadcast
         if (!interimTranscript || (now - lastSendTime.current > 100)) {
+          // Cleanup closed connections
+          connectionsRef.current = connectionsRef.current.filter(conn => conn.open);
+
           connectionsRef.current.forEach(conn => {
-            if (conn.open) {
-              try {
-                conn.send({ type: 'caption', text: fullText });
-              } catch (e) {
-                console.error("Broadcast failed", e);
-              }
+            try {
+              conn.send({ type: 'caption', text: fullText });
+            } catch (e) {
+              console.error("Broadcast failed", e);
             }
           });
           lastSendTime.current = now;
@@ -251,7 +274,7 @@ const VideoCall = () => {
     };
 
     recognitionRef.current = recognition;
-    startRecognition();
+    // Don't auto-start. Wait for user interaction.
 
     return () => {
       recognition.stop();
@@ -261,14 +284,33 @@ const VideoCall = () => {
     };
   }, []);
 
-  const startListening = () => {
-    if (recognitionRef.current && !isRecognitionActive.current) {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error(e);
+  const toggleListening = () => {
+    const newListeningState = !shouldListenRef.current;
+
+    if (shouldListenRef.current) {
+      shouldListenRef.current = false;
+      if (recognitionRef.current) recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      shouldListenRef.current = true;
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {
+          console.error(e);
+        }
       }
     }
+
+    // Broadcast listening state to all connections
+    connectionsRef.current = connectionsRef.current.filter(conn => conn.open);
+    connectionsRef.current.forEach(conn => {
+      try {
+        conn.send({ type: 'listening', isListening: newListeningState });
+      } catch (e) {
+        console.error("Failed to send listening state", e);
+      }
+    });
   };
 
   const callPeer = (remoteId) => {
@@ -279,7 +321,15 @@ const VideoCall = () => {
     setCallStatus('Calling...');
     setError('');
 
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+    navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 48000
+      }
+    })
       .then((stream) => {
         localStreamRef.current = stream;
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -382,6 +432,14 @@ const VideoCall = () => {
           <video ref={remoteVideoRef} autoPlay playsInline />
           <div className="name-tag">
             <span>Remote User</span>
+            {remoteIsListening && (
+              <span style={{
+                color: '#10B981',
+                fontSize: '12px',
+                marginLeft: '8px',
+                animation: 'pulse 1.5s infinite'
+              }}>🎤 Speaking</span>
+            )}
           </div>
           {remoteCaption && (
             <div style={{
@@ -389,17 +447,18 @@ const VideoCall = () => {
               top: '20px',
               left: '50%',
               transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.8)',
-              padding: '8px 16px',
+              background: 'rgba(16, 185, 129, 0.95)',
+              padding: '12px 20px',
               borderRadius: '16px',
               color: 'white',
-              fontSize: '14px',
+              fontSize: '16px',
               maxWidth: '90%',
               textAlign: 'center',
               zIndex: 20,
-              border: '1px solid rgba(255,255,255,0.2)'
+              border: '2px solid rgba(16, 185, 129, 1)',
+              boxShadow: '0 4px 16px rgba(16, 185, 129, 0.4)'
             }}>
-              <span style={{ color: '#A5B4FC', fontWeight: 'bold', marginRight: '4px' }}>Remote:</span>
+              <span style={{ fontWeight: 'bold', marginRight: '8px' }}>Remote:</span>
               {remoteCaption}
             </div>
           )}
@@ -456,36 +515,37 @@ const VideoCall = () => {
             </div>
 
             <div className="captions-box">
-              <p className="caption-text">
-                {caption ? (
-                  <>
-                    {caption}
-                  </>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
-                      {isListening ? "Listening..." : "Microphone is off"}
+              <div className="caption-text">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                  <button
+                    onClick={toggleListening}
+                    style={{
+                      background: isListening ? '#EF4444' : '#10B981',
+                      border: 'none',
+                      borderRadius: '20px',
+                      padding: '8px 20px',
+                      color: 'white',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    {isListening ? "Stop Speaking" : "Tap to Speak"}
+                  </button>
+
+                  {isListening ? (
+                    <span style={{ color: '#A5B4FC', fontWeight: '500' }}>
+                      {caption || "Listening..."}
                     </span>
-                    {!isListening && (
-                      <button
-                        onClick={startListening}
-                        style={{
-                          background: '#667eea',
-                          border: 'none',
-                          borderRadius: '20px',
-                          padding: '6px 16px',
-                          color: 'white',
-                          fontSize: '12px',
-                          cursor: 'pointer',
-                          fontWeight: '600'
-                        }}
-                      >
-                        Tap to Speak
-                      </button>
-                    )}
-                  </div>
-                )}
-              </p>
+                  ) : (
+                    <span style={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                      Press button to start
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           </>
         ) : (
@@ -495,10 +555,7 @@ const VideoCall = () => {
         )}
       </div>
 
-      {/* Live Caption Overlay */}
-
-
-      {/* Live Caption Overlay */}
+      {/* Live Caption Overlay - YOUR TEXT */}
       {caption && (
         <div id="liveCaption" style={{
           position: 'fixed',
@@ -506,18 +563,20 @@ const VideoCall = () => {
           left: '50%',
           transform: 'translateX(-50%)',
           maxWidth: '800px',
-          background: 'rgba(0, 0, 0, 0.9)',
+          background: 'rgba(59, 130, 246, 0.95)',
           backdropFilter: 'blur(10px)',
           padding: '16px 24px',
           borderRadius: '16px',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5)',
+          boxShadow: '0 8px 24px rgba(59, 130, 246, 0.5)',
           zIndex: 500,
           color: 'white',
           fontSize: '18px',
           lineHeight: '1.5',
-          fontWeight: '500',
+          fontWeight: '600',
           textAlign: 'center',
+          border: '2px solid rgba(59, 130, 246, 1)'
         }}>
+          <span style={{ marginRight: '8px' }}>You:</span>
           {caption}
         </div>
       )}
