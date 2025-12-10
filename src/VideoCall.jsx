@@ -94,6 +94,7 @@ const VideoCall = () => {
   const lastSendTime = useRef(0);
   const transcriptHistory = useRef([]);
   const isRecognitionActive = useRef(false);
+  const clearCaptionTimeout = useRef(null);
 
   const handleConnection = (conn) => {
     conn.on('data', (data) => {
@@ -200,11 +201,18 @@ const VideoCall = () => {
     recognition.onresult = (event) => {
       let interimTranscript = '';
 
+      // Clear any pending clear-caption timeout since we have new speech
+      if (clearCaptionTimeout.current) {
+        clearTimeout(clearCaptionTimeout.current);
+        clearCaptionTimeout.current = null;
+      }
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
           transcriptHistory.current.push(transcript);
-          if (transcriptHistory.current.length > 3) {
+          // Limit history to 1 sentence to prevent "continuing" text accumulation
+          if (transcriptHistory.current.length > 1) {
             transcriptHistory.current.shift();
           }
         } else {
@@ -231,6 +239,14 @@ const VideoCall = () => {
           });
           lastSendTime.current = now;
         }
+
+        // Set a timeout to clear the caption (and history) after 3 seconds of silence
+        clearCaptionTimeout.current = setTimeout(() => {
+          setCaption('');
+          transcriptHistory.current = [];
+          // Optional: You could broadcast an empty string here if you want the remote side to clear too
+          // but for now we focus on the local "accuracy" requested.
+        }, 3000);
       }
     };
 
@@ -239,6 +255,9 @@ const VideoCall = () => {
 
     return () => {
       recognition.stop();
+      if (clearCaptionTimeout.current) {
+        clearTimeout(clearCaptionTimeout.current);
+      }
     };
   }, []);
 
